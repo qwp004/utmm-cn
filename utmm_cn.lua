@@ -139,12 +139,7 @@ pcall(function()
     gameMetaTable.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
         local args = {...}
-        if var.godmode and method == "FireServer" then
-            local cs = getcallingscript()
-            if cs and (cs.Name == "Handler" or (cs.Parent and cs.Parent.Name == "PlayerGui")) then 
-                return nil 
-            end
-        end
+        if var.godmode and CallingScript and method == "FireServer" and getcallingscript() == CallingScript then return nil end
         return oldMetaTable(self,...) end)
 end)
 
@@ -417,50 +412,7 @@ Tab:CreateButton({
 
 Tab:CreateToggle({
     Name = "无敌模式", CurrentValue = false, Flag = "Godmode_v6",
-    Callback = function(Value)
-        var.godmode = Value
-        if Value then
-            -- 方法1: Hook Humanoid 健值变化
-            task.spawn(function()
-                while var.godmode do
-                    pcall(function()
-                        if cl.Character then
-                            local hum = cl.Character:FindFirstChildOfClass("Humanoid")
-                            if hum then
-                                hum.MaxHealth = math.huge
-                                hum.Health = math.huge
-                            end
-                        end
-                    end)
-                    wait(0.5)
-                end
-            end)
-            -- 方法2: 拦截伤害相关的FireServer
-            task.spawn(function()
-                while var.godmode do
-                    pcall(function()
-                        if cl.Character then
-                            local hum = cl.Character:FindFirstChildOfClass("Humanoid")
-                            if hum then
-                                hum.BreakJointsOnDeath = false
-                            end
-                        end
-                    end)
-                    wait(1)
-                end
-            end)
-        else
-            pcall(function()
-                if cl.Character then
-                    local hum = cl.Character:FindFirstChildOfClass("Humanoid")
-                    if hum then
-                        hum.MaxHealth = 100
-                    end
-                end
-            end)
-        end
-        notify("状态", "无敌模式: " .. (Value and "开" or "关"))
-    end,
+    Callback = function(Value) var.godmode = Value; notify("状态", "无敌模式: " .. (Value and "开" or "关")) end,
 })
 
 Tab:CreateToggle({
