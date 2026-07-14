@@ -139,7 +139,12 @@ pcall(function()
     gameMetaTable.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
         local args = {...}
-        if var.godmode and CallingScript and method == "FireServer" and getcallingscript() == CallingScript then return nil end
+        if var.godmode and method == "FireServer" then
+            local cs = getcallingscript()
+            if cs and (cs.Name == "Handler" or (cs.Parent and cs.Parent.Name == "PlayerGui")) then 
+                return nil 
+            end
+        end
         return oldMetaTable(self,...) end)
 end)
 
@@ -321,6 +326,60 @@ local function safeFire(part, mode)
     return ok
 end
 
+local function getWeaponHandle()
+    local char = cl.Character
+    if not char then return nil end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if tool then
+        local handle = tool:FindFirstChild("Handle")
+        if handle then return handle end
+        for _,p in ipairs(tool:GetDescendants()) do
+            if p:IsA("BasePart") then return p end
+        end
+    end
+    return nil
+end
+
+local function autoEquipWeapon()
+    local char = cl.Character
+    if not char then return nil end
+    if char:FindFirstChildOfClass("Tool") then return char:FindFirstChildOfClass("Tool") end
+    if cl.Backpack then
+        for _,v in ipairs(cl.Backpack:GetChildren()) do
+            if v:IsA("Tool") then
+                pcall(function() cl.Character.Humanoid:EquipTool(v) end)
+                wait(0.1)
+                return char:FindFirstChildOfClass("Tool")
+            end
+        end
+    end
+    return nil
+end
+
+local function attackAllEnemies()
+    if not var.bf then return end
+    local tool = autoEquipWeapon()
+    if not tool then return end
+    local handle = getWeaponHandle()
+    if not handle then handle = tool:FindFirstChildWhichIsA("BasePart") end
+    if not handle then return end
+    
+    for _, v in ipairs(var.bf:GetChildren()) do
+        pcall(function()
+            if v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") then
+                local hum = v:FindFirstChildOfClass("Humanoid")
+                local hp = getNum(hum, 0)
+                if hum and hp > 0 and not v:FindFirstChildOfClass("ForceField") then
+                    local hrp = v:FindFirstChild("HumanoidRootPart")
+                    pcall(function() firetouchinterest(handle, hrp, 0) end)
+                    pcall(function() firetouchinterest(handle, hrp, 1) end)
+                    pcall(function() tool:Activate() end)
+                end
+            end
+        end)
+    end
+end
+
 local function killAllInBF()
     if not var.bf then return end
     pcall(function() sethiddenproperty(cl, "MaxSimulationRadius", 9e10) end)
@@ -342,21 +401,7 @@ Tab:CreateToggle({
         if Value then
             var.hital = rs.Stepped:Connect(function()
                 task.spawn(function()
-                    if not var.bf or not var.gettool or not cl.Character then return end
-                    for _, v in next, var.bf:GetChildren() do
-                        pcall(function()
-                            if v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") then
-                                local hum = v:FindFirstChildOfClass("Humanoid")
-                                local hp = getNum(hum, 0)
-                                if hum and hp > 0 and not v:FindFirstChildOfClass("ForceField") then
-                                    local hrp = v:FindFirstChild("HumanoidRootPart")
-                                    local tool = cl.Character:FindFirstChildOfClass("Tool")
-                                    pcall(function() firetouchinterest(var.gettool, hrp, 0); firetouchinterest(var.gettool, hrp, 1) end)
-                                    if tool then pcall(function() tool:Activate() end) end
-                                end
-                            end
-                        end)
-                    end
+                    attackAllEnemies()
                 end)
             end)
         else
@@ -372,7 +417,50 @@ Tab:CreateButton({
 
 Tab:CreateToggle({
     Name = "无敌模式", CurrentValue = false, Flag = "Godmode_v6",
-    Callback = function(Value) var.godmode = Value; notify("状态", "无敌模式: " .. (Value and "开" or "关")) end,
+    Callback = function(Value)
+        var.godmode = Value
+        if Value then
+            -- 方法1: Hook Humanoid 健值变化
+            task.spawn(function()
+                while var.godmode do
+                    pcall(function()
+                        if cl.Character then
+                            local hum = cl.Character:FindFirstChildOfClass("Humanoid")
+                            if hum then
+                                hum.MaxHealth = math.huge
+                                hum.Health = math.huge
+                            end
+                        end
+                    end)
+                    wait(0.5)
+                end
+            end)
+            -- 方法2: 拦截伤害相关的FireServer
+            task.spawn(function()
+                while var.godmode do
+                    pcall(function()
+                        if cl.Character then
+                            local hum = cl.Character:FindFirstChildOfClass("Humanoid")
+                            if hum then
+                                hum.BreakJointsOnDeath = false
+                            end
+                        end
+                    end)
+                    wait(1)
+                end
+            end)
+        else
+            pcall(function()
+                if cl.Character then
+                    local hum = cl.Character:FindFirstChildOfClass("Humanoid")
+                    if hum then
+                        hum.MaxHealth = 100
+                    end
+                end
+            end)
+        end
+        notify("状态", "无敌模式: " .. (Value and "开" or "关"))
+    end,
 })
 
 Tab:CreateToggle({
@@ -763,31 +851,7 @@ Tab:CreateToggle({
                             if var.km == "Instant-kill" then
                                 killAllInBF()
                             elseif var.km == "Hit-aura" then
-                                if var.bf and var.gettool and cl.Character:FindFirstChildOfClass("Tool") then
-                                    for _, v in next, var.bf:GetChildren() do
-                                        pcall(function()
-                                            if v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") then
-                                                local hum = v:FindFirstChildOfClass("Humanoid")
-                                                local hp = getNum(hum, 0)
-                                                if hum and hp > 0 then
-                                                    local hrp = v:FindFirstChild("HumanoidRootPart")
-                                                    if safezonepart then pcall(function() cl.Character:FindFirstChild("HumanoidRootPart").CFrame = safezonepart.CFrame + Vector3.new(0,3,0) end) end
-                                                    pcall(function() cam.CameraSubject = v end)
-                                                    pcall(function() firetouchinterest(var.gettool, hrp, 0); firetouchinterest(var.gettool, hrp, 1) end)
-                                                    pcall(function() cl.Character:FindFirstChildOfClass("Tool"):Activate() end)
-                                                end
-                                            end
-                                        end)
-                                    end
-                                else
-                                    pcall(function()
-                                        if cl.Backpack then
-                                            for _,v in next,cl.Backpack:GetChildren() do
-                                                if v:IsA("Tool") and v:FindFirstChild("Damage") then v.Parent = cl.Character; break end
-                                            end
-                                        end
-                                    end)
-                                end
+                                attackAllEnemies()
                             else
                                 pcall(function()
                                     for _, v in next, cl.Character:GetChildren() do
@@ -903,31 +967,7 @@ Tab:CreateToggle({
                     if game.PlaceId == 8994821677 then
                         killAllInBF()
                     else
-                        if cl.Character:FindFirstChildOfClass("Tool") then
-                            if var.bf and var.gettool then
-                                for _, v in next, var.bf:GetChildren() do
-                                    pcall(function()
-                                        if v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") then
-                                            local hum = v:FindFirstChildOfClass("Humanoid")
-                                            local hp = getNum(hum, 0)
-                                            if hum and hp > 0 then
-                                                local hrp = v:FindFirstChild("HumanoidRootPart")
-                                                pcall(function() firetouchinterest(var.gettool, hrp, 0); firetouchinterest(var.gettool, hrp, 1) end)
-                                                pcall(function() cl.Character:FindFirstChildOfClass("Tool"):Activate() end)
-                                            end
-                                        end
-                                    end)
-                                end
-                            end
-                        else
-                            pcall(function()
-                                if cl.Backpack then
-                                    for _,v in next,cl.Backpack:GetChildren() do
-                                        if v:IsA("Tool") and v:FindFirstChild("Damage") then v.Parent = cl.Character; break end
-                                    end
-                                end
-                            end)
-                        end
+                        attackAllEnemies()
                     end
                 end
                 pcall(function()
