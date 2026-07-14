@@ -979,32 +979,56 @@ local function safeFire2(part, mode)
     return ok
 end
 
+-- 从 Rayfield Dropdown 选项字符串中提取名称(| 之前的部分)
+local function extractName(s)
+    if type(s) ~= "string" then return nil end
+    local first = string.match(s, "^[^|]+")
+    if first then first = string.gsub(first, "%s+$", ""); first = string.gsub(first, "^%s+", "") end
+    return first
+end
+
+-- 从 Rayfield Dropdown 对象读取当前选中值(兼容 string/table 两种 CurrentOption 格式)
+local function readDropdown(dropdown)
+    if not dropdown then return nil end
+    local co = nil
+    pcall(function() co = dropdown.CurrentOption end)
+    if type(co) == "table" then co = co[1] end
+    if type(co) ~= "string" then return nil end
+    if co == "无" or co == "" then return nil end
+    return co
+end
+
 local Tab2 = Window:CreateTab("物品/商店", 4483362458)
 Tab2:CreateSection("商店")
 
 if #var.shops == 0 then
     Tab2:CreateSection("未发现商店")
 else
-Tab2:CreateDropdown({
+local shopDropdown = Tab2:CreateDropdown({
    Name = "商店列表", Options = var.shops, CurrentOption = "无", Flag = "Dropdown5_v5",
    Callback = function(Option)
-       if type(Option) == "string" then var.shop = Option; notify("商店", "已选择: " .. Option) end
+       local opt = Option
+       if type(opt) == "table" then opt = opt[1] end
+       if type(opt) == "string" and opt ~= "无" and opt ~= "" then sd.var.shop = opt; notify("商店", "已选择: " .. opt) end
    end,
 })
 
 Tab2:CreateToggle({
    Name = "显示选中的商店界面", CurrentValue = false, Flag = "dhow_v5",
    Callback = function(Value)
-      var.ssh = Value
+      sd.var.ssh = Value
       if Value then
-        if not var.shop or var.shop == "" or var.shop == "无" then notify("警告", "请先选择商店"); var.ssh = false; return end
-        var.sshl = rs.Stepped:Connect(function()
+        local shopName = sd.var.shop
+        if not shopName or shopName == "" or shopName == "无" then shopName = readDropdown(shopDropdown) end
+        if not shopName or shopName == "" or shopName == "无" then notify("警告", "请先选择商店"); sd.var.ssh = false; return end
+        sd.var.shop = shopName
+        sd.var.sshl = rs.Stepped:Connect(function()
             task.spawn(function()
                 pcall(function()
                     if not ws:FindFirstChild("Shops") or not cl.Character or not cl.Character:FindFirstChild("HumanoidRootPart") then return end
                     for _,v in next,ws.Shops:GetChildren() do
                         if v:IsA("BasePart") then
-                            if v.Name == var.shop then safeFire2(v, 0) else safeFire2(v, 1) end
+                            if v.Name == sd.var.shop then safeFire2(v, 0) else safeFire2(v, 1) end
                         end
                     end
                 end)
@@ -1016,7 +1040,7 @@ Tab2:CreateToggle({
                 for _,v in next,ws.Shops:GetChildren() do if v:IsA("BasePart") then safeFire2(v, 1) end end
             end
         end)
-        if var.sshl then pcall(function() var.sshl:Disconnect() end); var.sshl = nil end
+        if sd.var.sshl then pcall(function() sd.var.sshl:Disconnect() end); sd.var.sshl = nil end
       end
    end,
 })
@@ -1061,116 +1085,128 @@ Tab2:CreateButton({
 })
 
 if #items.weapons > 0 then
-Tab2:CreateDropdown({
+local weaponDropdown = Tab2:CreateDropdown({
    Name = "武器列表", Options = items.weapons, CurrentOption = "无", Flag = "Dropdown1_v5",
    Callback = function(Option)
-       if type(Option) ~= "string" then return end
-       local first = string.match(Option, "^[^|]+")
-       if first then first = string.gsub(first, "%s+$", ""); first = string.gsub(first, "^%s+", "") end
-       var.wep = first or ""
+       local opt = Option
+       if type(opt) == "table" then opt = opt[1] end
+       local name = extractName(opt)
+       sd.var.wep = name or ""
    end,
 })
 Tab2:CreateButton({
    Name = "购买选中的武器",
    Callback = function()
-      if not var.wep or var.wep == "无" or var.wep == "" then notify("警告", "请先选择武器"); return end
+      local name = sd.var.wep
+      if not name or name == "无" or name == "" then name = extractName(readDropdown(weaponDropdown)) end
+      if not name or name == "无" or name == "" then notify("警告", "请先选择武器"); return end
+      sd.var.wep = name
       task.spawn(function()
         local found = false
         pcall(function()
             for _,v in ipairs(lg.Weapons:GetChildren()) do
-                if getVal(v:FindFirstChild("Onsale"), false) == true and v:FindFirstChild("WeaponName") and getVal(v.WeaponName, "") == var.wep then
+                if getVal(v:FindFirstChild("Onsale"), false) == true and v:FindFirstChild("WeaponName") and getVal(v.WeaponName, "") == name then
                     local args = {[1] = v, [2] = "Weapon"}; pcall(function() lg.Buy:FireServer(unpack(args)) end); found = true; break
                 end
             end
         end)
-        notify("购物", found and ("已购买: " .. var.wep) or "购买失败: " .. var.wep)
+        notify("购物", found and ("已购买: " .. name) or "购买失败: " .. name)
       end)
    end,
 })
 end
 
 if #items.armors > 0 then
-Tab2:CreateDropdown({
+local armorDropdown = Tab2:CreateDropdown({
    Name = "护甲列表", Options = items.armors, CurrentOption = "无", Flag = "Dropdown2_v5",
    Callback = function(Option)
-       if type(Option) ~= "string" then return end
-       local first = string.match(Option, "^[^|]+")
-       if first then first = string.gsub(first, "%s+$", ""); first = string.gsub(first, "^%s+", "") end
-       var.armor = first or ""
+       local opt = Option
+       if type(opt) == "table" then opt = opt[1] end
+       local name = extractName(opt)
+       sd.var.armor = name or ""
    end,
 })
 Tab2:CreateButton({
    Name = "购买选中的护甲",
    Callback = function()
-      if not var.armor or var.armor == "无" or var.armor == "" then notify("警告", "请先选择护甲"); return end
+      local name = sd.var.armor
+      if not name or name == "无" or name == "" then name = extractName(readDropdown(armorDropdown)) end
+      if not name or name == "无" or name == "" then notify("警告", "请先选择护甲"); return end
+      sd.var.armor = name
       task.spawn(function()
         local found = false
         pcall(function()
             for _,v in ipairs(lg.Armor:GetChildren()) do
-                if getVal(v:FindFirstChild("Onsale"), false) == true and v:FindFirstChild("ArmorName") and getVal(v.ArmorName, "") == var.armor then
+                if getVal(v:FindFirstChild("Onsale"), false) == true and v:FindFirstChild("ArmorName") and getVal(v.ArmorName, "") == name then
                     local args = {[1] = v, [2] = "Armor"}; pcall(function() lg.Buy:FireServer(unpack(args)) end); found = true; break
                 end
             end
         end)
-        notify("购物", found and ("已购买: " .. var.armor) or "购买失败: " .. var.armor)
+        notify("购物", found and ("已购买: " .. name) or "购买失败: " .. name)
       end)
    end,
 })
 end
 
 if #items.foods > 0 then
-Tab2:CreateDropdown({
+local foodDropdown = Tab2:CreateDropdown({
    Name = "食物列表", Options = items.foods, CurrentOption = "无", Flag = "Dropdown3_v5",
    Callback = function(Option)
-       if type(Option) ~= "string" then return end
-       local first = string.match(Option, "^[^|]+")
-       if first then first = string.gsub(first, "%s+$", ""); first = string.gsub(first, "^%s+", "") end
-       var.food = first or ""
+       local opt = Option
+       if type(opt) == "table" then opt = opt[1] end
+       local name = extractName(opt)
+       sd.var.food = name or ""
    end,
 })
 Tab2:CreateButton({
    Name = "购买选中的食物",
    Callback = function()
-      if not var.food or var.food == "无" or var.food == "" then notify("警告", "请先选择食物"); return end
+      local name = sd.var.food
+      if not name or name == "无" or name == "" then name = extractName(readDropdown(foodDropdown)) end
+      if not name or name == "无" or name == "" then notify("警告", "请先选择食物"); return end
+      sd.var.food = name
       task.spawn(function()
         local found = false
         pcall(function()
             for _,v in ipairs(lg.Food:GetChildren()) do
-                if getVal(v:FindFirstChild("Onsale"), false) == true and v:FindFirstChild("FoodName") and getVal(v.FoodName, "") == var.food then
+                if getVal(v:FindFirstChild("Onsale"), false) == true and v:FindFirstChild("FoodName") and getVal(v.FoodName, "") == name then
                     local args = {[1] = v, [2] = "Food"}; pcall(function() lg.Buy:FireServer(unpack(args)) end); found = true; break
                 end
             end
         end)
-        notify("购物", found and ("已购买: " .. var.food) or "购买失败: " .. var.food)
+        notify("购物", found and ("已购买: " .. name) or "购买失败: " .. name)
       end)
    end,
 })
 end
 
 if #items.souls > 0 then
-Tab2:CreateDropdown({
+local soulDropdown = Tab2:CreateDropdown({
    Name = "灵魂列表", Options = items.souls, CurrentOption = "无", Flag = "DropdownSoul_v5",
    Callback = function(Option)
-       if type(Option) ~= "string" then return end
-       local first = string.match(Option, "^[^|]+")
-       if first then first = string.gsub(first, "%s+$", ""); first = string.gsub(first, "^%s+", "") end
-       var.soul = first or ""
+       local opt = Option
+       if type(opt) == "table" then opt = opt[1] end
+       local name = extractName(opt)
+       sd.var.soul = name or ""
    end,
 })
 Tab2:CreateButton({
    Name = "购买选中的灵魂",
    Callback = function()
-      if not var.soul or var.soul == "无" or var.soul == "" then notify("警告", "请先选择灵魂"); return end
+      local name = sd.var.soul
+      if not name or name == "无" or name == "" then name = extractName(readDropdown(soulDropdown)) end
+      if not name or name == "无" or name == "" then notify("警告", "请先选择灵魂"); return end
+      sd.var.soul = name
       task.spawn(function()
         local found = false
         pcall(function()
             for _,v in ipairs(lg.SOULs:GetChildren()) do
-                if getVal(v:FindFirstChild("Onsale"), false) == true and v:FindFirstChild("SoulName") and getVal(v.SoulName, "") == var.soul then
+                if getVal(v:FindFirstChild("Onsale"), false) == true and v:FindFirstChild("SoulName") and getVal(v.SoulName, "") == name then
                     local args = {[1] = v, [2] = "SOUL"}; pcall(function() lg.Buy:FireServer(unpack(args)) end); found = true; break
                 end
             end
         end)
-        notify("购物", found and ("已购买: " .. var.soul) or "购买失败: " .. var.soul)
+        notify("购物", found and ("已购买: " .. name) or "购买失败: " .. name)
       end)
    end,
 })
