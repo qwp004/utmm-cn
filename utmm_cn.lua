@@ -335,29 +335,21 @@ local function getWeaponHandle()
     return nil
 end
 
-local function autoEquipWeapon()
-    local char = cl.Character
-    if not char then return nil end
-    if char:FindFirstChildOfClass("Tool") then return char:FindFirstChildOfClass("Tool") end
-    if cl.Backpack then
-        for _,v in ipairs(cl.Backpack:GetChildren()) do
-            if v:IsA("Tool") then
-                pcall(function() cl.Character.Humanoid:EquipTool(v) end)
-                wait(0.1)
-                return char:FindFirstChildOfClass("Tool")
-            end
-        end
-    end
-    return nil
-end
+local lastAttackTime = 0
+local inCombat = false
 
 local function attackAllEnemies()
     if not var.bf then return end
-    local tool = autoEquipWeapon()
+    local char = cl.Character
+    if not char then return end
+    local tool = char:FindFirstChildOfClass("Tool")
     if not tool then return end
     local handle = getWeaponHandle()
-    if not handle then handle = tool:FindFirstChildWhichIsA("BasePart") end
     if not handle then return end
+    
+    local now = tick()
+    if now - lastAttackTime < 0.15 then return end
+    lastAttackTime = now
     
     for _, v in ipairs(var.bf:GetChildren()) do
         pcall(function()
@@ -396,7 +388,12 @@ Tab:CreateToggle({
         if Value then
             var.hital = rs.Stepped:Connect(function()
                 task.spawn(function()
-                    attackAllEnemies()
+                    if not cl.Character then return end
+                    local inBattle = false
+                    pcall(function() inBattle = cl.Character:FindFirstChild("_battle") ~= nil end)
+                    if inBattle then
+                        attackAllEnemies()
+                    end
                 end)
             end)
         else
@@ -1033,22 +1030,27 @@ Tab2:CreateButton({
         local bought = 0
         pcall(function()
             for _,v in ipairs(lg.Armor:GetChildren()) do
-                if v:FindFirstChild("Cost") and v.Cost.Value <= 10000 then
+                local cost = getVal(v:FindFirstChild("Cost"), 999999)
+                if cost <= 10000 then
                     local args = {[1] = v, [2] = "Armor"}; pcall(function() lg.Buy:FireServer(unpack(args)) end); bought = bought + 1; wait(0.05)
                 end
             end
             for _,v in ipairs(lg.Weapons:GetChildren()) do
-                if v:FindFirstChild("Cost") and v.Cost.Value <= 10000 then
+                local cost = getVal(v:FindFirstChild("Cost"), 999999)
+                if cost <= 10000 then
                     local args = {[1] = v, [2] = "Weapon"}; pcall(function() lg.Buy:FireServer(unpack(args)) end); bought = bought + 1; wait(0.05)
                 end
             end
             for _,v in ipairs(lg.SOULs:GetChildren()) do
-                if v:FindFirstChild("Cost") and v.Cost.Value <= 10000 and v:FindFirstChild("Fragments") and v.Fragments.Value == 0 then
+                local cost = getVal(v:FindFirstChild("Cost"), 999999)
+                local frag = getVal(v:FindFirstChild("Fragments"), 0)
+                if cost <= 10000 and frag == 0 then
                     local args = {[1] = v, [2] = "SOUL"}; pcall(function() lg.Buy:FireServer(unpack(args)) end); bought = bought + 1; wait(0.05)
                 end
             end
             for _,v in ipairs(lg.Food:GetChildren()) do
-                if v:FindFirstChild("Cost") and v.Cost.Value <= 10000 then
+                local cost = getVal(v:FindFirstChild("Cost"), 999999)
+                if cost <= 10000 then
                     local args = {[1] = v, [2] = "Food"}; pcall(function() lg.Buy:FireServer(unpack(args)) end); bought = bought + 1; wait(0.05)
                 end
             end
@@ -1076,7 +1078,7 @@ Tab2:CreateButton({
         local found = false
         pcall(function()
             for _,v in ipairs(lg.Weapons:GetChildren()) do
-                if v:FindFirstChild("Onsale") and v.Onsale.Value and v:FindFirstChild("WeaponName") and v.WeaponName.Value == var.wep then
+                if getVal(v:FindFirstChild("Onsale"), false) == true and v:FindFirstChild("WeaponName") and getVal(v.WeaponName, "") == var.wep then
                     local args = {[1] = v, [2] = "Weapon"}; pcall(function() lg.Buy:FireServer(unpack(args)) end); found = true; break
                 end
             end
@@ -1105,7 +1107,7 @@ Tab2:CreateButton({
         local found = false
         pcall(function()
             for _,v in ipairs(lg.Armor:GetChildren()) do
-                if v:FindFirstChild("Onsale") and v.Onsale.Value and v:FindFirstChild("ArmorName") and v.ArmorName.Value == var.armor then
+                if getVal(v:FindFirstChild("Onsale"), false) == true and v:FindFirstChild("ArmorName") and getVal(v.ArmorName, "") == var.armor then
                     local args = {[1] = v, [2] = "Armor"}; pcall(function() lg.Buy:FireServer(unpack(args)) end); found = true; break
                 end
             end
@@ -1134,7 +1136,7 @@ Tab2:CreateButton({
         local found = false
         pcall(function()
             for _,v in ipairs(lg.Food:GetChildren()) do
-                if v:FindFirstChild("Onsale") and v.Onsale.Value and v:FindFirstChild("FoodName") and v.FoodName.Value == var.food then
+                if getVal(v:FindFirstChild("Onsale"), false) == true and v:FindFirstChild("FoodName") and getVal(v.FoodName, "") == var.food then
                     local args = {[1] = v, [2] = "Food"}; pcall(function() lg.Buy:FireServer(unpack(args)) end); found = true; break
                 end
             end
@@ -1163,7 +1165,7 @@ Tab2:CreateButton({
         local found = false
         pcall(function()
             for _,v in ipairs(lg.SOULs:GetChildren()) do
-                if v:FindFirstChild("Onsale") and v.Onsale.Value and v:FindFirstChild("SoulName") and v.SoulName.Value == var.soul then
+                if getVal(v:FindFirstChild("Onsale"), false) == true and v:FindFirstChild("SoulName") and getVal(v.SoulName, "") == var.soul then
                     local args = {[1] = v, [2] = "SOUL"}; pcall(function() lg.Buy:FireServer(unpack(args)) end); found = true; break
                 end
             end
