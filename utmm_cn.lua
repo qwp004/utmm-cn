@@ -520,10 +520,12 @@ Tab:CreateButton({
         if sortOrder == "asc" then
             sortOrder = "desc"
             var.bosses = sortBosses("desc")
+            if bossDropdown then bossDropdown:SetOptions(var.bosses) end
             notify("排序", "已切换为从大到小排列")
         else
             sortOrder = "asc"
             var.bosses = sortBosses("asc")
+            if bossDropdown then bossDropdown:SetOptions(var.bosses) end
             notify("排序", "已切换为从小到大排列")
         end
     end,
@@ -560,7 +562,7 @@ local function extractBossName(opt)
     return nil
 end
 
-Tab:CreateDropdown({
+local bossDropdown = Tab:CreateDropdown({
    Name = "首领列表", Options = var.bosses, CurrentOption = var.bosses[1] or "无", Flag = "Dropdown4_v6",
    Callback = function(Option)
      local ok, err = pcall(function()
@@ -631,6 +633,13 @@ Tab:CreateButton({
           
           table.insert(challengedBosses, {name=bossName, time=os.time()})
           if #challengedBosses > 50 then table.remove(challengedBosses, 1) end
+          
+          task.spawn(function()
+              wait(0.2)
+              if challengeHistoryDropdown then
+                  challengeHistoryDropdown:SetOptions(getChallengeHistory())
+              end
+          end)
           
           local ok1 = safeFire(var.boss, 0); wait(0.1); local ok2 = safeFire(var.boss, 1)
           if ok1 and ok2 then 
