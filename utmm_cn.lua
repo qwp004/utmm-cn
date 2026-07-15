@@ -230,25 +230,29 @@ function getitemname(name)
     return "无"
 end
 
--- 扫描首领 (保存原始数据用于排序)
+-- 从Lighting.Battles读取首领原始数据
 sd.bossData = {}
-pcall(function()
-    if lg:FindFirstChild("Battles") then
-        for _,v in ipairs(lg.Battles:GetChildren()) do
-            if v:FindFirstChild("BattleName") then
-                local bname = getVal(v.BattleName, "?")
-                local lv = getVal(v:FindFirstChild("LOVE"), 0)
-                local rst = getVal(v:FindFirstChild("Resets"), 0)
-                local trst = getVal(v:FindFirstChild("TrueReset"), 0)
-                local rw = "无"
-                if v:FindFirstChild("RewardWeapon") then rw = getitemname(tostring(getVal(v.RewardWeapon, ""))) end
-                local str = bname .. " | 等级: " .. tostring(fn(lv)) .. " | 重置: " .. tostring(fn(rst)) .. " | 真重置: " .. tostring(fn(trst)) .. " | 奖励: " .. rw
-                table.insert(var.bosses, str)
-                table.insert(sd.bossData, {name=bname, love=lv, resets=rst, trueReset=trst, reward=rw, display=str})
+do
+    local temp = {}
+    pcall(function()
+        if lg:FindFirstChild("Battles") then
+            for _,v in ipairs(lg.Battles:GetChildren()) do
+                if v:FindFirstChild("BattleName") then
+                    local bname = getVal(v.BattleName, "?")
+                    local lv = getVal(v:FindFirstChild("LOVE"), 0)
+                    local rst = getVal(v:FindFirstChild("Resets"), 0)
+                    local trst = getVal(v:FindFirstChild("TrueReset"), 0)
+                    local rw = "无"
+                    if v:FindFirstChild("RewardWeapon") then rw = getitemname(tostring(getVal(v.RewardWeapon, ""))) end
+                    local str = bname .. " | 等级: " .. tostring(fn(lv)) .. " | 重置: " .. tostring(fn(rst)) .. " | 真重置: " .. tostring(fn(trst)) .. " | 奖励: " .. rw
+                    table.insert(temp, str)
+                    table.insert(sd.bossData, {name=bname, love=lv, resets=rst, trueReset=trst, reward=rw, display=str})
+                end
             end
         end
-    end
-end)
+    end)
+    for _,v in ipairs(temp) do table.insert(var.bosses, v) end
+end
 
 pcall(function() for _,v in next,lg:GetChildren() do if v.Name:match("~<>~6999") then v.Name = v.Name:gsub("~<>~6999","") end end end)
 
@@ -336,7 +340,7 @@ local function getWeaponHandle()
 end
 
 local lastAttackTime = 0
-local inCombat = false
+local attackCooldown = 0.05
 
 local function attackAllEnemies()
     if not var.bf then return end
@@ -344,27 +348,40 @@ local function attackAllEnemies()
     if not char then return end
     local tool = char:FindFirstChildOfClass("Tool")
     if not tool then return end
-    local handle = getWeaponHandle()
+    local handle = nil
+    pcall(function()
+        local h = tool:FindFirstChild("Handle")
+        if h then handle = h end
+        if not handle then
+            for _,p in ipairs(tool:GetDescendants()) do
+                if p:IsA("BasePart") then handle = p; break end
+            end
+        end
+    end)
     if not handle then return end
-    
+
     local now = tick()
-    if now - lastAttackTime < 0.15 then return end
+    if now - lastAttackTime < attackCooldown then return end
     lastAttackTime = now
-    
-    for _, v in ipairs(var.bf:GetChildren()) do
-        pcall(function()
+
+    local enemies = {}
+    pcall(function()
+        for _, v in ipairs(var.bf:GetChildren()) do
             if v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") then
                 local hum = v:FindFirstChildOfClass("Humanoid")
                 local hp = getNum(hum, 0)
                 if hum and hp > 0 and not v:FindFirstChildOfClass("ForceField") then
-                    local hrp = v:FindFirstChild("HumanoidRootPart")
-                    pcall(function() firetouchinterest(handle, hrp, 0) end)
-                    pcall(function() firetouchinterest(handle, hrp, 1) end)
-                    pcall(function() tool:Activate() end)
+                    table.insert(enemies, v:FindFirstChild("HumanoidRootPart"))
                 end
             end
-        end)
+        end
+    end)
+
+    for _, hrp in ipairs(enemies) do
+        pcall(function() firetouchinterest(handle, hrp, 0) end)
+        pcall(function() firetouchinterest(handle, hrp, 1) end)
     end
+    pcall(function() tool:Activate() end)
 end
 
 local function killAllInBF()
@@ -389,6 +406,7 @@ Tab:CreateToggle({
             var.hital = rs.Stepped:Connect(function()
                 task.spawn(function()
                     if not cl.Character then return end
+                    if not var.bf then return end
                     local inBattle = false
                     pcall(function() inBattle = cl.Character:FindFirstChild("_battle") ~= nil end)
                     if inBattle then
@@ -539,15 +557,6 @@ task.spawn(function()
     notify("扫描", "已定位 " .. c .. " 个首领")
 end)
 
-Tab:CreateButton({
-    Name = "重新扫描首领位置",
-    Callback = function() 
-        bossNameToPart = {}
-        bossOriginalCFrame = {}
-        scanBossParts(true) 
-    end,
-})
-
 -- 默认从小到大
 var.bosses = sortBosses("asc")
 
@@ -635,6 +644,42 @@ local sortButton = Tab:CreateButton({
             if sortButton then pcall(function() sortButton:Set("切换首领排列顺序 (当前: 从小到大)") end) end
             notify("排序", "已切换为从小到大排列")
         end
+    end,
+})
+
+-- 重新扫描首领数据（数据+位置都刷新）
+local function rescanBossData()
+    local newData = {}
+    pcall(function()
+        if lg:FindFirstChild("Battles") then
+            for _,v in ipairs(lg.Battles:GetChildren()) do
+                if v:FindFirstChild("BattleName") then
+                    local bname = getVal(v.BattleName, "?")
+                    local lv = getVal(v:FindFirstChild("LOVE"), 0)
+                    local rst = getVal(v:FindFirstChild("Resets"), 0)
+                    local trst = getVal(v:FindFirstChild("TrueReset"), 0)
+                    local rw = "无"
+                    if v:FindFirstChild("RewardWeapon") then rw = getitemname(tostring(getVal(v.RewardWeapon, ""))) end
+                    local str = bname .. " | 等级: " .. tostring(fn(lv)) .. " | 重置: " .. tostring(fn(rst)) .. " | 真重置: " .. tostring(fn(trst)) .. " | 奖励: " .. rw
+                    table.insert(newData, {name=bname, love=lv, resets=rst, trueReset=trst, reward=rw, display=str})
+                end
+            end
+        end
+    end)
+    sd.bossData = newData
+    var.bosses = sortBosses(sortOrder)
+    if bossDropdown then pcall(function() bossDropdown:SetOptions(var.bosses) end) end
+    return #newData
+end
+
+Tab:CreateButton({
+    Name = "刷新首领列表",
+    Callback = function()
+        task.spawn(function()
+            local count = rescanBossData()
+            scanBossParts(false)
+            notify("刷新", "已刷新首领列表，共 " .. count .. " 个")
+        end)
     end,
 })
 
