@@ -551,23 +551,6 @@ Tab:CreateButton({
 -- 默认从小到大
 var.bosses = sortBosses("asc")
 
-Tab:CreateButton({
-    Name = "切换首领排列顺序 (当前: 从小到大)",
-    Callback = function()
-        if sortOrder == "asc" then
-            sortOrder = "desc"
-            var.bosses = sortBosses("desc")
-            if bossDropdown then bossDropdown:SetOptions(var.bosses) end
-            notify("排序", "已切换为从大到小排列")
-        else
-            sortOrder = "asc"
-            var.bosses = sortBosses("asc")
-            if bossDropdown then bossDropdown:SetOptions(var.bosses) end
-            notify("排序", "已切换为从小到大排列")
-        end
-    end,
-})
-
 local function extractBossName(opt)
     if type(opt) == "string" then
         local first = string.match(opt, "^[^|]+")
@@ -635,6 +618,26 @@ local bossDropdown = Tab:CreateDropdown({
    end,
 })
 
+-- 排序按钮（必须在bossDropdown定义之后）
+local sortButton = Tab:CreateButton({
+    Name = "切换首领排列顺序 (当前: 从小到大)",
+    Callback = function()
+        if sortOrder == "asc" then
+            sortOrder = "desc"
+            var.bosses = sortBosses("desc")
+            if bossDropdown then pcall(function() bossDropdown:SetOptions(var.bosses) end) end
+            if sortButton then pcall(function() sortButton:Set("切换首领排列顺序 (当前: 从大到小)") end) end
+            notify("排序", "已切换为从大到小排列")
+        else
+            sortOrder = "asc"
+            var.bosses = sortBosses("asc")
+            if bossDropdown then pcall(function() bossDropdown:SetOptions(var.bosses) end) end
+            if sortButton then pcall(function() sortButton:Set("切换首领排列顺序 (当前: 从小到大)") end) end
+            notify("排序", "已切换为从小到大排列")
+        end
+    end,
+})
+
 local function restoreBossPosition(bossName)
     if bossName and bossOriginalCFrame[bossName] and bossNameToPart[bossName] then
         pcall(function()
@@ -670,11 +673,11 @@ Tab:CreateButton({
           
           table.insert(challengedBosses, {name=bossName, time=os.time()})
           if #challengedBosses > 50 then table.remove(challengedBosses, 1) end
-          
+
           task.spawn(function()
               wait(0.2)
               if challengeHistoryDropdown then
-                  challengeHistoryDropdown:SetOptions(getChallengeHistory())
+                  pcall(function() challengeHistoryDropdown:SetOptions(getChallengeHistory()) end)
               end
           end)
           
@@ -719,14 +722,17 @@ local function getChallengeHistory()
     for i, v in ipairs(challengedBosses) do
         table.insert(history, v.name .. " | " .. os.date("%H:%M", v.time))
     end
+    if #history == 0 then history = {"无"} end
     return history
 end
 
 local challengeHistoryDropdown = Tab:CreateDropdown({
    Name = "挑战记录", Options = getChallengeHistory(), CurrentOption = "无", Flag = "ChallengeHistory_v6",
    Callback = function(Option)
-       if type(Option) ~= "string" then return end
-       local bossName = extractBossName(Option)
+       local opt = Option
+       if type(opt) == "table" then opt = opt[1] end
+       if type(opt) ~= "string" then return end
+       local bossName = extractBossName(opt)
        if bossName and bossNameToPart[bossName] then
            var.boss = bossNameToPart[bossName]
            notify("记录", "已选择: " .. bossName)
@@ -738,10 +744,10 @@ Tab:CreateButton({
     Name = "刷新挑战记录",
     Callback = function()
         local history = getChallengeHistory()
-        if #history == 0 then
+        if #history == 0 or (#history == 1 and history[1] == "无") then
             notify("记录", "暂无挑战记录")
         else
-            challengeHistoryDropdown:SetOptions(history)
+            if challengeHistoryDropdown then pcall(function() challengeHistoryDropdown:SetOptions(history) end) end
             notify("记录", "已刷新记录")
         end
     end,
@@ -751,7 +757,7 @@ Tab:CreateButton({
     Name = "清除挑战记录",
     Callback = function()
         challengedBosses = {}
-        challengeHistoryDropdown:SetOptions({"无"})
+        if challengeHistoryDropdown then pcall(function() challengeHistoryDropdown:SetOptions({"无"}) end) end
         notify("记录", "已清除所有挑战记录")
     end,
 })
@@ -759,8 +765,9 @@ Tab:CreateButton({
 Tab:CreateDropdown({
    Name = "击杀方式", Options = {"攻击光环","秒杀","弹射"}, CurrentOption = "秒杀", MultipleOptions = false, Flag = "Dropdown7_v6",
    Callback = function(Option)
-     if type(Option) == "table" then return end
-     local s = tostring(Option or "")
+     local opt = Option
+     if type(opt) == "table" then opt = opt[1] end
+     local s = tostring(opt or "")
      if s == "攻击光环" then var.km = "Hit-aura"
      elseif s == "秒杀" then var.km = "Instant-kill"
      else var.km = "Fling" end
